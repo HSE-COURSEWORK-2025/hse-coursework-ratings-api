@@ -10,3 +10,5 @@ starlette
 uvicorn
 google-auth
 requests
+sqlalchemy
+psycopg2

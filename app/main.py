@@ -49,6 +49,11 @@ def custom_openapi():
         description="API documentation with Bearer auth",
         routes=app.routes,
     )
+
+    # Добавляем сервер с указанием ROOT_PATH
+    if settings.ROOT_PATH:
+        openapi_schema["servers"] = [{"url": settings.ROOT_PATH}]
+
     openapi_schema["components"]["securitySchemes"] = {
         "Bearer": {
             "type": "http",
@@ -56,12 +61,13 @@ def custom_openapi():
             "bearerFormat": "JWT",
         }
     }
-    # Apply security scheme globally
+    # Применяем схему безопасности глобально ко всем роутам
     for path in openapi_schema["paths"]:
         for method in openapi_schema["paths"][path]:
             openapi_schema["paths"][path][method]["security"] = [{"Bearer": []}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
+
 
 app.openapi = custom_openapi
 
