@@ -6,10 +6,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
 from .settings import settings
-from .schemas import *
 
-logger = logging.getLogger('database')
-
+logger = logging.getLogger("database")
 
 class DbEngine:
     def __init__(self):

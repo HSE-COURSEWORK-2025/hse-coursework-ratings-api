@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from starlette.middleware.cors import CORSMiddleware
 
 from app.settings import settings, setup_logging
 from app.api.root import root_router
@@ -38,6 +37,7 @@ app = FastAPI(
     redoc_url=settings.APP_REDOC_URL,
     swagger_ui_oauth2_redirect_url=settings.APP_DOCS_URL + "/oauth2-redirect",
 )
+
 
 # Custom OpenAPI schema with Bearer token security scheme
 def custom_openapi():

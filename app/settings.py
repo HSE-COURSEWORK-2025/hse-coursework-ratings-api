@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
 
     GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+
+    GOOGLE_REDIRECT_URI: str | None = ""
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
@@ -40,8 +43,8 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     class Config:
-        env_file = ".env"
-        # env_file = ".env.development"
+        # env_file = ".env"
+        env_file = ".env.development"
         env_file_encoding = "utf-8"
         case_sensitive = False
         env_nested_delimiter = "__"
