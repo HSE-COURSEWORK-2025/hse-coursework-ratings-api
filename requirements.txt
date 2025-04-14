@@ -12,3 +12,5 @@ google-auth
 requests
 sqlalchemy
 psycopg2
+qrcode
+Pillow

@@ -54,6 +54,7 @@ def custom_openapi():
     if settings.ROOT_PATH:
         openapi_schema["servers"] = [{"url": settings.ROOT_PATH}]
 
+    openapi_schema["components"] = {}
     openapi_schema["components"]["securitySchemes"] = {
         "Bearer": {
             "type": "http",

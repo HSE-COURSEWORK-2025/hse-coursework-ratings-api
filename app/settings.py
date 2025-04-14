@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     APP_REDOC_URL: str | None = None
     PRODUCTION: bool = False
 
-    ROOT_PATH: str | None = "/auth-api"
+    ROOT_PATH: str | None = "/data-collection-api"
     PORT: int | None = 8080
 
     SECRET_KEY: str = secrets.token_urlsafe(32)
