@@ -12,6 +12,12 @@ from app.api.root import root_router
 from app.api.v1.router import api_v1_router
 from app.services.db.schemas import Base
 from app.services.db.engine import db_engine
+from app.services.kafka import kafka_client
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import OAuth2PasswordBearer
+
 
 logger = logging.getLogger(__name__)
 setup_logging()
@@ -20,6 +26,18 @@ setup_logging()
 # кастомизация для генератора openapi клиента
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
+
+security = HTTPBearer()
+
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    # Здесь выполните валидацию токена (например, с помощью JWT библиотеки)
+    if token != "expected_token":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    return token
 
 
 app = FastAPI(
@@ -37,40 +55,6 @@ app = FastAPI(
     redoc_url=settings.APP_REDOC_URL,
     swagger_ui_oauth2_redirect_url=settings.APP_DOCS_URL + "/oauth2-redirect",
 )
-
-
-# Custom OpenAPI schema with Bearer token security scheme
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description="API documentation with Bearer auth",
-        routes=app.routes,
-    )
-
-    # Добавляем сервер с указанием ROOT_PATH
-    if settings.ROOT_PATH:
-        openapi_schema["servers"] = [{"url": settings.ROOT_PATH}]
-
-    openapi_schema["components"] = {}
-    openapi_schema["components"]["securitySchemes"] = {
-        "Bearer": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-        }
-    }
-    # Применяем схему безопасности глобально ко всем роутам
-    for path in openapi_schema["paths"]:
-        for method in openapi_schema["paths"][path]:
-            openapi_schema["paths"][path][method]["security"] = [{"Bearer": []}]
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-
-app.openapi = custom_openapi
 
 instrumentator = Instrumentator(
     should_ignore_untemplated=True,
@@ -91,12 +75,16 @@ async def startup_event():
     except Exception:
         pass
 
+    await kafka_client.connect()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     # await cmdb_client_stop()
     # await FastAPILimiter.close()
     ...
+
+    await kafka_client.disconnect()
 
 
 if settings.BACKEND_CORS_ORIGINS:

@@ -3,7 +3,8 @@ import logging
 import secrets
 from pydantic import AnyHttpUrl, validator, EmailStr
 from pydantic_settings import BaseSettings
-
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
 
 class Settings(BaseSettings):
     LOG_LEVEL: str = "DEBUG"
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     APP_VERSION: str = "dev"
-    APP_TITLE: str = "HSE-COURSEWORK Auth API"
+    APP_TITLE: str = "HSE-COURSEWORK Data Collection API"
     APP_CONTACT_NAME: str = "MALYSH_II"
     APP_CONTACT_EMAIL: EmailStr = "iimalysh@edu.hse.ru"
     APP_OPENAPI_URL: str = "/openapi.json"
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
 
     GOOGLE_REDIRECT_URI: str | None = ""
 
+    KAFKA_BOOTSTRAP_SERVERS: str | None = "localhost:9092"
+
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
         if isinstance(v, str) and not v.startswith("["):
@@ -52,6 +55,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+security = HTTPBearer()
 
 
 def setup_logging():
