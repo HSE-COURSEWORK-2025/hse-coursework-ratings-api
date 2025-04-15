@@ -37,6 +37,9 @@ class Settings(BaseSettings):
 
     KAFKA_BOOTSTRAP_SERVERS: str | None = "localhost:9092"
 
+    RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data"
+
+
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
         if isinstance(v, str) and not v.startswith("["):

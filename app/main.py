@@ -70,12 +70,12 @@ async def startup_event():
         include_in_schema=False,
         tags=["root"],
     )
-    try:
-        Base.metadata.create_all(bind=db_engine.engine)
-    except Exception:
-        pass
+    # try:
+    #     Base.metadata.create_all(bind=db_engine.engine)
+    # except Exception:
+    #     pass
 
-    await kafka_client.connect()
+    # await kafka_client.connect()
 
 
 @app.on_event("shutdown")
@@ -84,7 +84,7 @@ async def shutdown_event():
     # await FastAPILimiter.close()
     ...
 
-    await kafka_client.disconnect()
+    # await kafka_client.disconnect()
 
 
 if settings.BACKEND_CORS_ORIGINS:
