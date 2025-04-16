@@ -1,4 +1,6 @@
 from pydantic import BaseModel
+from enum import Enum
+from typing import List
 
 
 class DataItem(BaseModel):
@@ -6,7 +8,6 @@ class DataItem(BaseModel):
     value: str | None = ""
 
 
-from enum import Enum
 
 class DataType(str, Enum):
     """Enum для типов данных здоровья и активности"""
@@ -44,3 +45,9 @@ class TokenData(BaseModel):
     email: str
     name: str
     picture: str
+
+
+class KafkaRawDataMsg(BaseModel):
+    rawData: dict | List[dict]
+    dataType: str
+    userData: TokenData

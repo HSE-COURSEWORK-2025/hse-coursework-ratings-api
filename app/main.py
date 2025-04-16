@@ -75,7 +75,7 @@ async def startup_event():
     # except Exception:
     #     pass
 
-    # await kafka_client.connect()
+    await kafka_client.connect()
 
 
 @app.on_event("shutdown")
@@ -84,7 +84,7 @@ async def shutdown_event():
     # await FastAPILimiter.close()
     ...
 
-    # await kafka_client.disconnect()
+    await kafka_client.disconnect()
 
 
 if settings.BACKEND_CORS_ORIGINS:
