@@ -5,9 +5,17 @@ from pydantic import AnyHttpUrl, validator, EmailStr
 from pydantic_settings import BaseSettings
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security import HTTPBearer
+import socket
+
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+ip = s.getsockname()[0]
+s.close()
+
 
 class Settings(BaseSettings):
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     LOG_UVICORN_FORMAT: str = "%(asctime)s %(levelname)s uvicorn: %(message)s"
     LOG_ACCESS_FORMAT: str = "%(asctime)s %(levelname)s access: %(message)s"
     LOG_DEFAULT_FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -38,6 +46,10 @@ class Settings(BaseSettings):
     KAFKA_BOOTSTRAP_SERVERS: str | None = "localhost:9092"
 
     RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data"
+
+
+    AUTH_API_URL: str | None = f"http://{ip}:8081"
+    AUTH_API_USER_INFO_PATH: str | None = "/auth-api/api/v1/auth/users/me"
 
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)

@@ -37,3 +37,10 @@ class DataType(str, Enum):
     RESPIRATORY_RATE_RECORD = "RespiratoryRateRecord"
     RESTING_HEART_RATE_RECORD = "RestingHeartRateRecord"
     SKIN_TEMPERATURE_RECORD = "SkinTemperatureRecord"
+
+
+class TokenData(BaseModel):
+    google_sub: str
+    email: str
+    name: str
+    picture: str
