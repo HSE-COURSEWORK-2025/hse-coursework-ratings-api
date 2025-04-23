@@ -1,6 +1,10 @@
 import logging
+import asyncio
+import json
+import random
 
 from prometheus_fastapi_instrumentator import Instrumentator
+
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -17,6 +21,9 @@ from app.services.kafka import kafka_client
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.security import OAuth2PasswordBearer
+
+from app.settings import user_clients
+from app.services.redis import redis_client
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +83,7 @@ async def startup_event():
     #     pass
 
     await kafka_client.connect()
+    await redis_client.connect()
 
 
 @app.on_event("shutdown")
@@ -85,12 +93,13 @@ async def shutdown_event():
     ...
 
     await kafka_client.disconnect()
+    await redis_client.disconnect()
 
 
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -99,3 +108,49 @@ if settings.BACKEND_CORS_ORIGINS:
 
 app.include_router(api_v1_router)
 app.include_router(root_router)
+
+
+async def generate_random_progress():
+    health = 0
+    fitness = 0
+
+    while True:
+        health = min(100, health + random.randint(1, 5))
+        fitness = min(100, fitness + random.randint(1, 5))
+
+        payload = json.dumps({
+            "type": "progress",
+            "health": health,
+            "fitness": fitness
+        })
+
+        for email in user_clients:
+            await redis_client.set(f'{settings.REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE}{email}', payload)
+
+        await asyncio.sleep(1)
+
+async def broadcast_progress():
+    while True:
+
+        # Рассылаем всем подключенным клиентам
+        for email in user_clients:
+            payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE}{email}')
+            if payload:
+                for sock in user_clients[email]:
+                    try:
+                        await sock.send_text(payload)
+                    except Exception as e:
+                        user_clients[email].discard(email)
+
+
+
+        print('user_clients',user_clients)
+        await asyncio.sleep(1)
+
+
+@app.on_event("startup")
+async def start_broadcast_task():
+    # Запускаем бесконечный цикл, который каждую секунду будет отправлять обновления
+    asyncio.create_task(generate_random_progress())
+    asyncio.create_task(broadcast_progress())
+    

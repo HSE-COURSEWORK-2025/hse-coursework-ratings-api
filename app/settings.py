@@ -5,6 +5,8 @@ from pydantic import AnyHttpUrl, validator, EmailStr
 from pydantic_settings import BaseSettings
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security import HTTPBearer
+from fastapi import WebSocket
+from typing import Set
 import socket
 
 
@@ -52,6 +54,10 @@ class Settings(BaseSettings):
     AUTH_API_USER_INFO_PATH: str | None = "/auth-api/api/v1/auth/users/me"
 
 
+    REDIS_HOST: str | None = "localhost"
+    REDIS_PORT: str | None = "6379"
+    REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE: str | None = "DATA_COLLECTION_PROGRESS_BAR_NAMESPACE-"
+
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
         if isinstance(v, str) and not v.startswith("["):
@@ -71,6 +77,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 security = HTTPBearer()
+user_clients: dict[str, Set[WebSocket]] = {}
 
 
 def setup_logging():
