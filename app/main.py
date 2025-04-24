@@ -110,25 +110,6 @@ app.include_router(api_v1_router)
 app.include_router(root_router)
 
 
-async def generate_random_progress():
-    health = 0
-    fitness = 0
-
-    while True:
-        health = min(100, health + random.randint(1, 5))
-        fitness = min(100, fitness + random.randint(1, 5))
-
-        payload = json.dumps({
-            "type": "progress",
-            "health": health,
-            "fitness": fitness
-        })
-
-        for email in user_clients:
-            await redis_client.set(f'{settings.REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE}{email}', payload)
-
-        await asyncio.sleep(1)
-
 async def broadcast_progress():
     while True:
 
@@ -142,15 +123,10 @@ async def broadcast_progress():
                     except Exception as e:
                         user_clients[email].discard(email)
 
-
-
-        print('user_clients',user_clients)
         await asyncio.sleep(1)
 
 
 @app.on_event("startup")
 async def start_broadcast_task():
-    # Запускаем бесконечный цикл, который каждую секунду будет отправлять обновления
-    asyncio.create_task(generate_random_progress())
     asyncio.create_task(broadcast_progress())
     
