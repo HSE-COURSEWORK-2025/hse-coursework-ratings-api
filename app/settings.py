@@ -56,7 +56,8 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str | None = "localhost"
     REDIS_PORT: str | None = "6379"
-    REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE: str | None = "DATA_COLLECTION_PROGRESS_BAR_NAMESPACE-"
+    REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE-"
+    REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE-"
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
@@ -77,7 +78,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 security = HTTPBearer()
-user_clients: dict[str, Set[WebSocket]] = {}
+google_fitness_api_user_clients: dict[str, Set[WebSocket]] = {}
+google_health_api_user_clients: dict[str, Set[WebSocket]] = {}
 
 
 def setup_logging():

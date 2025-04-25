@@ -14,7 +14,7 @@ from fastapi import (
 from app.services.kafka import kafka_client
 from app.services.auth import get_current_user
 from app.models.models import DataItem, DataType, KafkaRawDataMsg
-from app.settings import settings, security, user_clients
+from app.settings import settings, security, google_fitness_api_user_clients, google_health_api_user_clients
 
 
 api_v2_processing_status_router = APIRouter(
@@ -22,15 +22,15 @@ api_v2_processing_status_router = APIRouter(
 )
 
 
-@api_v2_processing_status_router.websocket("/progress")
-async def progress_websocket_endpoint(
+@api_v2_processing_status_router.websocket("/google_fitness_api_progress")
+async def google_fitness_api_progress_websocket_endpoint(
     websocket: WebSocket, token: str
 ):
     await websocket.accept()
     user_data = await get_current_user(token)
     user_email = user_data.email
 
-    user_clients.setdefault(user_email, set()).add(websocket)
+    google_fitness_api_user_clients.setdefault(user_email, set()).add(websocket)
 
     try:
         while True:
@@ -39,13 +39,24 @@ async def progress_websocket_endpoint(
     except WebSocketDisconnect:
         print(f"Client {user_email} disconnected")
     finally:
-        user_clients[user_email].discard(websocket)
+        google_fitness_api_user_clients[user_email].discard(websocket)
 
 
-
-
-@api_v2_processing_status_router.get("/tst")
-async def asdaf(
-    
+@api_v2_processing_status_router.websocket("/google_health_api_progress")
+async def google_health_api_progress_websocket_endpoint(
+    websocket: WebSocket, token: str
 ):
-    return 'asd'
+    await websocket.accept()
+    user_data = await get_current_user(token)
+    user_email = user_data.email
+
+    google_health_api_user_clients.setdefault(user_email, set()).add(websocket)
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        print(f"Client {user_email} disconnected")
+    finally:
+        google_fitness_api_user_clients[user_email].discard(websocket)

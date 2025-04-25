@@ -4,10 +4,13 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
 from app.services.kafka import kafka_client
 from app.services.auth import get_current_user
+from app.services.redis import redis_client
 from app.models.models import DataItem, DataType, KafkaRawDataMsg
 from app.settings import settings, security
 
+
 api_v2_post_data_router = APIRouter(prefix="/post_data", tags=["post_data"])
+
 
 # Ручка для отправки списка данных в Kafka с использованием BackgroundTasks
 @api_v2_post_data_router.post("/raw_data/{data_type}", status_code=status.HTTP_200_OK)
@@ -21,6 +24,15 @@ async def send_kafka(
     try:
         # Для каждого объекта из списка добавляем задачу отправки в фон
         for item in data:
+            progress = item.get('progress')
+            email = item.get('email')
+            if progress:
+                payload = json.dumps({"type": "google_health_api", "progress": progress})
+                await redis_client.set(
+                    f"{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}{email}",
+                    payload,
+                )
+
             # Подготавливаем сообщение
             data_to_send = KafkaRawDataMsg(rawData=item, dataType=data_type, userData=user_data)
             # Планируем отправку в фоне после возвращения ответа

@@ -22,7 +22,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.security import OAuth2PasswordBearer
 
-from app.settings import user_clients
+from app.settings import google_fitness_api_user_clients, google_health_api_user_clients
 from app.services.redis import redis_client
 
 
@@ -110,23 +110,39 @@ app.include_router(api_v1_router)
 app.include_router(root_router)
 
 
-async def broadcast_progress():
+async def broadcast_fitness_api_progress():
     while True:
-
         # Рассылаем всем подключенным клиентам
-        for email in user_clients:
-            payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_PROGRESS_BAR_NAMESPACE}{email}')
-            if payload:
-                for sock in user_clients[email]:
+        for email in google_fitness_api_user_clients:
+            google_fitness_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE}{email}')
+            
+            if google_fitness_api_payload:
+                for sock in google_fitness_api_user_clients[email]:
                     try:
-                        await sock.send_text(payload)
+                        await sock.send_text(google_fitness_api_payload)
                     except Exception as e:
-                        user_clients[email].discard(email)
+                        google_fitness_api_user_clients[email].discard(email)
+
+        await asyncio.sleep(1)
+
+
+async def broadcast_health_api_progress():
+    while True:
+        # Рассылаем всем подключенным клиентам
+        for email in google_health_api_user_clients:
+            google_health_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}{email}')
+            
+            if google_health_api_payload:
+                for sock in google_health_api_user_clients[email]:
+                    try:
+                        await sock.send_text(google_health_api_payload)
+                    except Exception as e:
+                        google_health_api_user_clients[email].discard(email)
 
         await asyncio.sleep(1)
 
 
 @app.on_event("startup")
 async def start_broadcast_task():
-    asyncio.create_task(broadcast_progress())
-    
+    asyncio.create_task(broadcast_fitness_api_progress())
+    asyncio.create_task(broadcast_health_api_progress())
