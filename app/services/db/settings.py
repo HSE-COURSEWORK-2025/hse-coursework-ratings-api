@@ -13,7 +13,7 @@ class DbSettings(BaseSettings):
 
     DB_USER: str | None = "postgres"
     DB_PASSWORD: str | None = "postgres"
-    DB_NAME: str | None = "postgres"
+    DB_NAME: str | None = "records"
 
     class Config:
         # env_file = '.env'

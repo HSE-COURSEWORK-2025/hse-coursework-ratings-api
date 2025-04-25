@@ -8,10 +8,9 @@ class DataItem(BaseModel):
     value: str | None = ""
 
 
-
 class DataType(str, Enum):
     """Enum для типов данных здоровья и активности"""
-    
+
     SLEEP_SESSION_DATA = "SleepSessionData"
     BLOOD_OXYGEN_DATA = "BloodOxygenData"
     HEART_RATE_RECORD = "HeartRateRecord"
@@ -38,6 +37,15 @@ class DataType(str, Enum):
     RESPIRATORY_RATE_RECORD = "RespiratoryRateRecord"
     RESTING_HEART_RATE_RECORD = "RestingHeartRateRecord"
     SKIN_TEMPERATURE_RECORD = "SkinTemperatureRecord"
+
+    # Дополнительно добавленные типы:
+    HEIGHT_RECORD = "HeightRecord"
+    ACTIVITY_SEGMENT_RECORD = "ActivitySegmentRecord"
+    CYCLING_PEDALING_CADENCE_RECORD = "CyclingPedalingCadenceRecord"
+    CYCLING_PEDALING_CUMULATIVE_RECORD = "CyclingPedalingCumulativeRecord"
+    HEART_MINUTES_RECORD = "HeartMinutesRecord"
+    ACTIVE_MINUTES_RECORD = "ActiveMinutesRecord"
+    STEP_CADENCE_RECORD = "StepCadenceRecord"
 
 
 class TokenData(BaseModel):

@@ -16,3 +16,4 @@ qrcode
 Pillow
 aiokafka
 aiohttp
+aioredis

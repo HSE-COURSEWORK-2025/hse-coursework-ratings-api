@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     KAFKA_BOOTSTRAP_SERVERS: str | None = "localhost:9092"
 
-    RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data"
+    RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data_topic"
 
 
     AUTH_API_URL: str | None = f"http://{ip}:8081"
