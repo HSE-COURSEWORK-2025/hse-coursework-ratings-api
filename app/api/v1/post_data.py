@@ -25,7 +25,7 @@ async def send_kafka(
         # Для каждого объекта из списка добавляем задачу отправки в фон
         for item in data:
             progress = item.get('progress')
-            email = item.get('email')
+            email = user_data.email
             if progress:
                 payload = json.dumps({"type": "google_health_api", "progress": progress})
                 await redis_client.set(
