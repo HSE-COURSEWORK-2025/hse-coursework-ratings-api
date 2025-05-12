@@ -1,18 +1,30 @@
 import logging
+import asyncio
+import json
+import random
 
 from prometheus_fastapi_instrumentator import Instrumentator
+
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from starlette.middleware.cors import CORSMiddleware
 
 from app.settings import settings, setup_logging
 from app.api.root import root_router
 from app.api.v1.router import api_v1_router
 from app.services.db.schemas import Base
 from app.services.db.engine import db_engine
+from app.services.kafka import kafka_client
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import OAuth2PasswordBearer
+
+from app.settings import google_fitness_api_user_clients, google_health_api_user_clients
+from app.services.redis import redis_client
+
 
 logger = logging.getLogger(__name__)
 setup_logging()
@@ -21,6 +33,18 @@ setup_logging()
 # кастомизация для генератора openapi клиента
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
+
+security = HTTPBearer()
+
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    # Здесь выполните валидацию токена (например, с помощью JWT библиотеки)
+    if token != "expected_token":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    return token
 
 
 app = FastAPI(
@@ -39,38 +63,6 @@ app = FastAPI(
     swagger_ui_oauth2_redirect_url=settings.APP_DOCS_URL + "/oauth2-redirect",
 )
 
-# Custom OpenAPI schema with Bearer token security scheme
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description="API documentation with Bearer auth",
-        routes=app.routes,
-    )
-
-    # Добавляем сервер с указанием ROOT_PATH
-    if settings.ROOT_PATH:
-        openapi_schema["servers"] = [{"url": settings.ROOT_PATH}]
-
-    openapi_schema["components"]["securitySchemes"] = {
-        "Bearer": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-        }
-    }
-    # Применяем схему безопасности глобально ко всем роутам
-    for path in openapi_schema["paths"]:
-        for method in openapi_schema["paths"][path]:
-            openapi_schema["paths"][path][method]["security"] = [{"Bearer": []}]
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-
-app.openapi = custom_openapi
-
 instrumentator = Instrumentator(
     should_ignore_untemplated=True,
     excluded_handlers=["/metrics"],
@@ -85,10 +77,13 @@ async def startup_event():
         include_in_schema=False,
         tags=["root"],
     )
-    try:
-        Base.metadata.create_all(bind=db_engine.engine)
-    except Exception:
-        pass
+    # try:
+    #     Base.metadata.create_all(bind=db_engine.engine)
+    # except Exception:
+    #     pass
+
+    await kafka_client.connect()
+    await redis_client.connect()
 
 
 @app.on_event("shutdown")
@@ -97,11 +92,14 @@ async def shutdown_event():
     # await FastAPILimiter.close()
     ...
 
+    await kafka_client.disconnect()
+    await redis_client.disconnect()
+
 
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -110,3 +108,41 @@ if settings.BACKEND_CORS_ORIGINS:
 
 app.include_router(api_v1_router)
 app.include_router(root_router)
+
+
+async def broadcast_fitness_api_progress():
+    while True:
+        # Рассылаем всем подключенным клиентам
+        for email in google_fitness_api_user_clients:
+            google_fitness_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE}{email}')
+            
+            if google_fitness_api_payload:
+                for sock in google_fitness_api_user_clients[email]:
+                    try:
+                        await sock.send_text(google_fitness_api_payload)
+                    except Exception as e:
+                        google_fitness_api_user_clients[email].discard(email)
+
+        await asyncio.sleep(1)
+
+
+async def broadcast_health_api_progress():
+    while True:
+        # Рассылаем всем подключенным клиентам
+        for email in google_health_api_user_clients:
+            google_health_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}{email}')
+            
+            if google_health_api_payload:
+                for sock in google_health_api_user_clients[email]:
+                    try:
+                        await sock.send_text(google_health_api_payload)
+                    except Exception as e:
+                        google_health_api_user_clients[email].discard(email)
+
+        await asyncio.sleep(1)
+
+
+@app.on_event("startup")
+async def start_broadcast_task():
+    asyncio.create_task(broadcast_fitness_api_progress())
+    asyncio.create_task(broadcast_health_api_progress())

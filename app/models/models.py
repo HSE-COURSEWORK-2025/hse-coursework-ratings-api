@@ -1,21 +1,16 @@
-import enum
-from datetime import datetime
-
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Text,
-    Enum as SQLEnum,
-)
-from sqlalchemy.sql import expression
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from pydantic import BaseModel
+from enum import Enum
+from typing import List
 
 
-class DataType(enum.Enum):
+class DataItem(BaseModel):
+    dataType: str | None = ""
+    value: str | None = ""
+
+
+class DataType(str, Enum):
+    """Enum для типов данных здоровья и активности"""
+
     SLEEP_SESSION_DATA = "SleepSessionData"
     BLOOD_OXYGEN_DATA = "BloodOxygenData"
     HEART_RATE_RECORD = "HeartRateRecord"
@@ -43,22 +38,24 @@ class DataType(enum.Enum):
     RESTING_HEART_RATE_RECORD = "RestingHeartRateRecord"
     SKIN_TEMPERATURE_RECORD = "SkinTemperatureRecord"
 
+    # Дополнительно добавленные типы:
+    HEIGHT_RECORD = "HeightRecord"
+    ACTIVITY_SEGMENT_RECORD = "ActivitySegmentRecord"
+    CYCLING_PEDALING_CADENCE_RECORD = "CyclingPedalingCadenceRecord"
+    CYCLING_PEDALING_CUMULATIVE_RECORD = "CyclingPedalingCumulativeRecord"
+    HEART_MINUTES_RECORD = "HeartMinutesRecord"
+    ACTIVE_MINUTES_RECORD = "ActiveMinutesRecord"
+    STEP_CADENCE_RECORD = "StepCadenceRecord"
 
-class RawRecords(Base):
-    __tablename__ = "raw_records"
 
-    id = Column(Integer, primary_key=True, index=True)
-    data_type = Column(
-        SQLEnum(DataType, name="data_type_enum"),
-        nullable=False,
-        index=True,
-    )
-    email = Column(String, nullable=False, index=True)
-    time = Column(DateTime(timezone=True), nullable=False, index=True)
-    value = Column(Text, nullable=False)
+class TokenData(BaseModel):
+    google_sub: str
+    email: str
+    name: str
+    picture: str
 
-    def __repr__(self):
-        return (
-            f"<SampleRecord(id={self.id}, data_type={self.data_type.name}, "
-            f"email={self.email}, time={self.time}, value={self.value})>"
-        )
+
+class KafkaRawDataMsg(BaseModel):
+    rawData: dict | List[dict]
+    dataType: str
+    userData: TokenData

@@ -11,4 +11,10 @@ uvicorn
 google-auth
 requests
 sqlalchemy
-psycopg2
+psycopg2-binary
+qrcode
+Pillow
+aiokafka
+aiohttp
+aioredis
+websockets

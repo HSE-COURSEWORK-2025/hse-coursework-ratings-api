@@ -3,17 +3,28 @@ import logging
 import secrets
 from pydantic import AnyHttpUrl, validator, EmailStr
 from pydantic_settings import BaseSettings
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
+from fastapi import WebSocket
+from typing import Set
+import socket
+
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+ip = s.getsockname()[0]
+s.close()
 
 
 class Settings(BaseSettings):
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     LOG_UVICORN_FORMAT: str = "%(asctime)s %(levelname)s uvicorn: %(message)s"
     LOG_ACCESS_FORMAT: str = "%(asctime)s %(levelname)s access: %(message)s"
     LOG_DEFAULT_FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     APP_VERSION: str = "dev"
-    APP_TITLE: str = "HSE-COURSEWORK Auth API"
+    APP_TITLE: str = "HSE-COURSEWORK Data Collection API"
     APP_CONTACT_NAME: str = "MALYSH_II"
     APP_CONTACT_EMAIL: EmailStr = "iimalysh@edu.hse.ru"
     APP_OPENAPI_URL: str = "/openapi.json"
@@ -21,7 +32,7 @@ class Settings(BaseSettings):
     APP_REDOC_URL: str | None = None
     PRODUCTION: bool = False
 
-    ROOT_PATH: str | None = "/auth-api"
+    ROOT_PATH: str | None = "/data-collection-api"
     PORT: int | None = 8080
 
     SECRET_KEY: str = secrets.token_urlsafe(32)
@@ -30,6 +41,23 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
 
     GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+
+    GOOGLE_REDIRECT_URI: str | None = ""
+
+    KAFKA_BOOTSTRAP_SERVERS: str | None = "localhost:9092"
+
+    RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data_topic"
+
+
+    AUTH_API_URL: str | None = f"http://{ip}:8081"
+    AUTH_API_USER_INFO_PATH: str | None = "/auth-api/api/v1/auth/users/me"
+
+
+    REDIS_HOST: str | None = "localhost"
+    REDIS_PORT: str | None = "6379"
+    REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE-"
+    REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE-"
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
@@ -40,8 +68,8 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     class Config:
-        env_file = ".env"
-        # env_file = ".env.development"
+        # env_file = ".env"
+        env_file = ".env.development"
         env_file_encoding = "utf-8"
         case_sensitive = False
         env_nested_delimiter = "__"
@@ -49,6 +77,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+security = HTTPBearer()
+google_fitness_api_user_clients: dict[str, Set[WebSocket]] = {}
+google_health_api_user_clients: dict[str, Set[WebSocket]] = {}
 
 
 def setup_logging():
