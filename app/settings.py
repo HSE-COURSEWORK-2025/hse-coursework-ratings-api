@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     RAW_DATA_KAFKA_TOPIC_NAME: str | None = "raw_data_topic"
 
-
-    AUTH_API_URL: str | None = f"http://{ip}:8081"
+    DOMAIN_NAME: str | None = "http://hse-coursework-health.ru"
+    AUTH_API_URL: str | None = f"{DOMAIN_NAME}:8081"
     AUTH_API_USER_INFO_PATH: str | None = "/auth-api/api/v1/auth/users/me"
 
 
@@ -68,8 +68,8 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     class Config:
-        # env_file = ".env"
-        env_file = ".env.development"
+        env_file = ".env"
+        # env_file = ".env.development"
         env_file_encoding = "utf-8"
         case_sensitive = False
         env_nested_delimiter = "__"

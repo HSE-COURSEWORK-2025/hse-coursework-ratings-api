@@ -18,3 +18,4 @@ aiokafka
 aiohttp
 aioredis
 websockets
+setuptools

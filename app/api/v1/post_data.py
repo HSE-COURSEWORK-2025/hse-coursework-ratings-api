@@ -14,7 +14,7 @@ api_v2_post_data_router = APIRouter(prefix="/post_data", tags=["post_data"])
 
 # Ручка для отправки списка данных в Kafka с использованием BackgroundTasks
 @api_v2_post_data_router.post("/raw_data/{data_type}", status_code=status.HTTP_200_OK)
-async def send_kafka(
+async def send_google_health_connect_data_kafka(
     data: List[dict],
     data_type: DataType,
     background_tasks: BackgroundTasks,
@@ -52,7 +52,7 @@ async def send_kafka(
 
 # Ручка для отправки списка данных в Kafka с использованием BackgroundTasks
 @api_v2_post_data_router.post("/raw_data_google_fitness_api/{data_type}", status_code=status.HTTP_200_OK)
-async def send_kafka(
+async def send_google_fitness_api_data_to_kafka(
     data: List[dict],
     data_type: DataType,
     background_tasks: BackgroundTasks,
