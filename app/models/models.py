@@ -58,3 +58,13 @@ class KafkaRawDataMsg(BaseModel):
     rawData: dict | List[dict]
     dataType: str
     userData: TokenData
+
+
+class DataRecord(BaseModel):
+    X: float
+    Y: float
+
+class DataWithOutliers(BaseModel):
+    data: List[DataRecord]
+    outliersX: List[float]
+    
