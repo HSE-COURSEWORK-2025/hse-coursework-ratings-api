@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
 from app.services.kafka import kafka_client
 from app.services.auth import get_current_user
 from app.services.redis import redis_client
-from app.models.models import DataItem, DataType, KafkaRawDataMsg, DataRecord, DataWithOutliers
+from app.models.models import DataItem, DataType, KafkaRawDataMsg, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -22,12 +22,27 @@ api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
 @api_v2_get_data_router.get("/raw_data/{data_type}", status_code=status.HTTP_200_OK)
 async def get_data_type(
     data_type: DataType,
-    # token=Depends(security),
-    # user_data=Depends(get_current_user)
+    token=Depends(security),
+    user_data=Depends(get_current_user)
 ) -> List[DataRecord]:
     try:
+        current_user_email = user_data.email
+
+        if not current_user_email:
+            raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Email not provided"
+        )
+
         session: Session = await get_session().__anext__()
-        stmt = select(RawRecords).where(RawRecords.data_type == data_type.value).order_by(RawRecords.time)
+        stmt = (
+            select(RawRecords)
+            .where(
+                (RawRecords.data_type == data_type.value)
+                & (RawRecords.email == current_user_email)
+            )
+            .order_by(RawRecords.time)
+        )
         result = session.execute(stmt)
         records = result.scalars().all()
 
@@ -46,15 +61,29 @@ async def get_data_type(
     status_code=status.HTTP_200_OK,
 )
 async def get_data_with_outliers(
-    data_type: DataType
+    data_type: DataType,
+    token=Depends(security),
+    user_data=Depends(get_current_user)
 ) -> DataWithOutliers:
+    
+    current_user_email = user_data.email
+
+    if not current_user_email:
+        raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Email not provided"
+    )
+
     try:
         z_threshold = 2
         session: Session = await get_session().__anext__()
 
         stmt = (
             select(RawRecords)
-            .where(RawRecords.data_type == data_type.value)
+            .where(
+                (RawRecords.data_type == data_type.value)
+                & (RawRecords.email == current_user_email)
+            )
             .order_by(RawRecords.time)
         )
         result = session.execute(stmt)
@@ -81,6 +110,27 @@ async def get_data_with_outliers(
             data=rec_list,
             outliersX=outliers_x
         )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching or processing data: {e}"
+        )
+
+
+@api_v2_get_data_router.get(
+    "/predictions",
+    response_model=List[Prediction],
+    status_code=status.HTTP_200_OK,
+)
+async def get_predictions(
+    data_type: DataType,
+    # token=Depends(security),
+    # user_data=Depends(get_current_user)
+) -> List[Prediction]:
+    try:
+        
+        return []
 
     except Exception as e:
         raise HTTPException(
