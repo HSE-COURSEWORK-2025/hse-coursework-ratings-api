@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
 from app.services.kafka import kafka_client
 from app.services.auth import get_current_user
-from app.services.redis import redis_client
+from app.services.redisClient import redis_client_async
 from app.models.models import DataItem, DataType, KafkaRawDataMsg, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
 from sqlalchemy.orm import Session

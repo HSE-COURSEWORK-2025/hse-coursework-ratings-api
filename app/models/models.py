@@ -67,8 +67,13 @@ class DataRecord(BaseModel):
 class DataWithOutliers(BaseModel):
     data: List[DataRecord]
     outliersX: List[float]
-    
+
 
 class Prediction(BaseModel):
     result: str
     diagnosisName: str
+
+
+class ProgressPayload(BaseModel):
+    progress: str
+    email: str

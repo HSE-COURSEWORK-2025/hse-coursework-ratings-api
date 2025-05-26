@@ -23,7 +23,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.security import OAuth2PasswordBearer
 
 from app.settings import google_fitness_api_user_clients, google_health_api_user_clients
-from app.services.redis import redis_client
+from app.services.redisClient import redis_client_async
 
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ async def startup_event():
     #     pass
 
     await kafka_client.connect()
-    await redis_client.connect()
+    await redis_client_async.connect()
 
 
 @app.on_event("shutdown")
@@ -93,7 +93,7 @@ async def shutdown_event():
     ...
 
     await kafka_client.disconnect()
-    await redis_client.disconnect()
+    await redis_client_async.disconnect()
 
 
 if settings.BACKEND_CORS_ORIGINS:
@@ -114,7 +114,7 @@ async def broadcast_fitness_api_progress():
     while True:
         # Рассылаем всем подключенным клиентам
         for email in google_fitness_api_user_clients:
-            google_fitness_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE}{email}')
+            google_fitness_api_payload = await redis_client_async.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE}{email}')
             
             if google_fitness_api_payload:
                 for sock in google_fitness_api_user_clients[email]:
@@ -130,7 +130,7 @@ async def broadcast_health_api_progress():
     while True:
         # Рассылаем всем подключенным клиентам
         for email in google_health_api_user_clients:
-            google_health_api_payload = await redis_client.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}{email}')
+            google_health_api_payload = await redis_client_async.get(f'{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}{email}')
             
             if google_health_api_payload:
                 for sock in google_health_api_user_clients[email]:

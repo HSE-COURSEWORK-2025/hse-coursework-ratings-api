@@ -10,6 +10,7 @@ starlette
 uvicorn
 google-auth
 requests
+redis
 sqlalchemy
 psycopg2-binary
 qrcode
