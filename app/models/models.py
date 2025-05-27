@@ -10,7 +10,8 @@ class DataItem(BaseModel):
 
 class DataType(str, Enum):
     # Исходные типы
-    SLEEP_SESSION_DATA                    = "SleepSessionData"
+    SLEEP_SESSION_STAGES_DATA                    = "SleepSessionStagesData"
+    SLEEP_SESSION_TIME_DATA                    = "SleepSessionTimeData"
     BLOOD_OXYGEN_DATA                     = "BloodOxygenData"
     HEART_RATE_RECORD                     = "HeartRateRecord"
     ACTIVE_CALORIES_BURNED_RECORD         = "ActiveCaloriesBurnedRecord"

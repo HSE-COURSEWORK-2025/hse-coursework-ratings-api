@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import isodate
 from typing import List
 
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
@@ -16,6 +17,78 @@ from dateutil.parser import parse
 
 
 api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
+
+
+@api_v2_get_data_router.get(
+    "/raw_data/SleepSessionTimeData",
+    status_code=status.HTTP_200_OK,
+    response_model=List[DataRecord],
+    summary="Получить данные с value из ISO-8601 в секундах"
+)
+async def get_raw_data_sleep_session_time_data(
+    token=Depends(security),
+    user_data=Depends(get_current_user)
+) -> List[DataRecord]:
+    """
+    Возвращает список точек:
+      - X = UNIX-время из поля `time` (с учётом таймзоны)
+      - Y = длительность в секундах, разобранная из строки `value` (ISO-8601, например PT1H10M)
+    """
+    email = user_data.email
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email не передан"
+        )
+
+    # Открываем сессию
+    session: Session = await get_session().__anext__()
+    try:
+        stmt = (
+            select(RawRecords)
+            .where(
+                (RawRecords.data_type == "SleepSessionTimeData") &
+                (RawRecords.email == email)
+            )
+            .order_by(RawRecords.time)
+        )
+        result = session.execute(stmt)
+        records = result.scalars().all()
+
+        output: List[DataRecord] = []
+        for rec in records:
+            # X: timestamp из datetime с tzinfo
+            try:
+                x = rec.time.timestamp()
+            except Exception:
+                continue  # пропускаем некорректные записи
+
+            # Y: парсим ISO-8601 строку в секунды
+            try:
+                duration = isodate.parse_duration(rec.value)
+                if hasattr(duration, "total_seconds"):
+                    total_seconds = duration.total_seconds()
+                else:
+                    total_seconds = (
+                        (duration.days or 0) * 86400 +
+                        # (duration.hours or 0) * 3600 +
+                        # (duration.minutes or 0) * 60 +
+                        (duration.seconds or 0)
+                    )
+            except Exception:
+                continue  # пропускаем, если формат невалиден
+
+            output.append(DataRecord(X=x, Y=float(total_seconds)))
+
+        return output
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при выборке данных: {e}"
+        )
+    finally:
+        session.close()
 
 
 # Ручка для отправки списка данных в Kafka с использованием BackgroundTasks

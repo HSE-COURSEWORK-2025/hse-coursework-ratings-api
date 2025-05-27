@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
 from app.services.kafka import kafka_client
 from app.services.auth import get_current_user
-from app.services.redisClient import redis_client_async, redis_client_sync
+from app.services.redisClient import redis_client_async
 from app.models.models import DataItem, DataType, KafkaRawDataMsg, ProgressPayload
 from app.settings import settings, security
 from dateutil import parser
@@ -23,7 +23,6 @@ api_v2_post_data_router = APIRouter(prefix="/post_data", tags=["post_data"])
 async def send_google_health_connect_data_kafka(
     data: List[dict],
     data_type: DataType,
-    sent_at: str,
     background_tasks: BackgroundTasks,
     token=Depends(security),
     user_data=Depends(get_current_user),
@@ -36,49 +35,8 @@ async def send_google_health_connect_data_kafka(
     """
     try:
         email = user_data.email
-        redis_key = (
-            f"{settings.REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE}"
-            f"{email}"
-        )
 
         for item in data:
-            new_progress_val = item.get("progress")
-
-            # Подготовка полезной нагрузки для Redis
-            if new_progress_val is not None:
-                payload = json.dumps(
-                    {
-                        "type": "google_health_api",
-                        "progress": new_progress_val,
-                        "sent_at": sent_at,
-                    }
-                )
-
-                curr = await redis_client_async.get(redis_key)
-                should_update = False
-                logging.info(f"curr {curr}")
-                if curr:
-                    try:
-                        curr_json = json.loads(curr)
-                        prev_sent_at = curr_json.get("sent_at")
-                        if prev_sent_at:
-                            prev_dt = parser.parse(prev_sent_at)
-                            new_dt = parser.parse(sent_at)
-                            if new_dt > prev_dt:
-                                should_update = True
-                            logging.info(f"prev_dt {prev_dt} new_dt {new_dt}")
-                    except Exception as e:
-                        logging.warning(
-                            f"Не удалось распарсить sent_at из Redis (key={redis_key}); обновляем. Ошибка: {e}"
-                        )
-                        # should_update = True
-                else:
-                    # В Redis ещё нет записи — создаём
-                    should_update = True
-
-                # if should_update:
-                #     await redis_client_async.set(redis_key, payload)
-
             # Формируем и планируем отправку в Kafka
             msg = KafkaRawDataMsg(
                 rawData=item, dataType=data_type, userData=user_data
@@ -145,8 +103,7 @@ async def update_progress_async(
     Синхронный роут. Записывает в Redis для заданного email:
       {
         "type": "google_health_api",
-        "progress": <0–100>,
-        "sent_at": <текущее время ISO>
+        "progress": <0–100>
       }
     """
     try:
@@ -161,7 +118,6 @@ async def update_progress_async(
             "sent_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
-        # Блокирующая запись
         await redis_client_async.set(redis_key, json.dumps(record))
 
         return {"status": "progress updated", "record": record}

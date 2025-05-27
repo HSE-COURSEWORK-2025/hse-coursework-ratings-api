@@ -25,6 +25,12 @@ from fastapi.security import OAuth2PasswordBearer
 from app.settings import google_fitness_api_user_clients, google_health_api_user_clients
 from app.services.redisClient import redis_client_async
 
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
+import logging
+
 
 logger = logging.getLogger(__name__)
 setup_logging()
@@ -106,8 +112,21 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 
+# @app.exception_handler(RequestValidationError)
+# async def validation_exception_handler(request: Request, exc: RequestValidationError):
+#     # Читаем «сырое» тело (bytes)
+#     body = await request.body()
+#     logging.error(f"🔴 422 validation error: {exc.errors()}\nRequest body: {body!r}")
+#     return JSONResponse(
+#         status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+#         content={"detail": exc.errors()},
+#     )   
+
+
 app.include_router(api_v1_router)
 app.include_router(root_router)
+
+
 
 
 async def broadcast_fitness_api_progress():
