@@ -38,7 +38,7 @@ class OutliersRecords(Base):
     __tablename__ = "outliers_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    raw_record_id = Column(Integer, ForeignKey("raw_records.id"), nullable=False, unique=True)
+    raw_record_id = Column(Integer, ForeignKey("raw_records.id"), nullable=False)
 
     outliers_search_iteration_num = Column(Integer, nullable=False)
     outliers_search_iteration_datetime = Column(DateTime(timezone=True), nullable=False)
