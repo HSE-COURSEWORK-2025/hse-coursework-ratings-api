@@ -10,9 +10,9 @@ from app.services.redisClient import redis_client_async
 from app.models.models import DataItem, DataType, KafkaRawDataMsg, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.services.db.db_session import get_session
-from app.services.db.schemas import RawRecords
+from app.services.db.schemas import RawRecords, OutliersRecords
 from dateutil.parser import parse
 
 
@@ -132,63 +132,81 @@ async def get_data_type(
     "/data_with_outliers/{data_type}",
     response_model=DataWithOutliers,
     status_code=status.HTTP_200_OK,
+    summary="Получить данные и заранее вычисленные выбросы (последней итерации)"
 )
 async def get_data_with_outliers(
     data_type: DataType,
     token=Depends(security),
     user_data=Depends(get_current_user)
 ) -> DataWithOutliers:
-    
-    current_user_email = user_data.email
-
-    if not current_user_email:
+    """
+    Возвращает:
+      - data: все точки (X = UNIX-время, Y = значение)
+      - outliersX: список X (UNIX-времён) тех точек, которые считаются выбросами 
+        и уже сохранены в таблице OutliersRecords для самой последней итерации.
+    """
+    email = user_data.email
+    if not email:
         raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Email not provided"
-    )
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email не передан"
+        )
 
+    session: Session = await get_session().__anext__()
     try:
-        z_threshold = 2
-        session: Session = await get_session().__anext__()
-
-        stmt = (
+        # 1) Все данные пользователя по типу
+        stmt_all = (
             select(RawRecords)
             .where(
-                (RawRecords.data_type == data_type.value)
-                & (RawRecords.email == current_user_email)
+                (RawRecords.data_type == data_type.value) &
+                (RawRecords.email == email)
             )
             .order_by(RawRecords.time)
         )
-        result = session.execute(stmt)
-        records = result.scalars().all()
-
-        rec_list = [
-            DataRecord(
-                X=parse(str(rec.time)).timestamp(),
-                Y=float(str(rec.value))
-            )
-            for rec in records
+        all_records = session.execute(stmt_all).scalars().all()
+        data = [
+            DataRecord(X=rec.time.timestamp(), Y=float(rec.value))
+            for rec in all_records
         ]
 
-        df = pd.DataFrame([{"x": r.X, "y": r.Y} for r in rec_list])
-
-        # Z-score метод
-        mean_y = df["y"].mean()
-        std_y  = df["y"].std(ddof=0)  # population std
-        # маска: |y - mean| > threshold * std
-        mask_outliers = (df["y"] - mean_y).abs() > z_threshold * std_y
-        outliers_x = df.loc[mask_outliers, "x"].tolist()
-
-        return DataWithOutliers(
-            data=rec_list,
-            outliersX=outliers_x
+        # 2) Находим максимальный номер итерации выбросов для этого пользователя и типа данных
+        #    делаем join RawRecords ↔ OutliersRecords, фильтруем по email+тип, берём max(iteration)
+        subq = (
+            select(func.max(OutliersRecords.outliers_search_iteration_num))
+            .join(RawRecords, OutliersRecords.raw_record_id == RawRecords.id)
+            .where(
+                (RawRecords.data_type == data_type.value) &
+                (RawRecords.email == email)
+            )
+            .scalar_subquery()
         )
+
+        # 3) Получаем RawRecords, у которых есть OutliersRecords с этим max-значением
+        stmt_out = (
+            select(RawRecords)
+            .join(
+                OutliersRecords,
+                (OutliersRecords.raw_record_id == RawRecords.id) &
+                (OutliersRecords.outliers_search_iteration_num == subq)
+            )
+            .where(
+                (RawRecords.data_type == data_type.value) &
+                (RawRecords.email == email)
+            )
+            .order_by(RawRecords.time)
+        )
+        outlier_recs = session.execute(stmt_out).scalars().all()
+        outliersX = [rec.time.timestamp() for rec in outlier_recs]
+
+        return DataWithOutliers(data=data, outliersX=outliersX)
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching or processing data: {e}"
+            detail=f"Ошибка при выборке данных: {e}"
         )
+    finally:
+        session.close()
 
 
 @api_v2_get_data_router.get(
