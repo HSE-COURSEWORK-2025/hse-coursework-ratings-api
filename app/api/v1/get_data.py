@@ -12,7 +12,7 @@ from app.settings import settings, security
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from app.services.db.db_session import get_session
-from app.services.db.schemas import RawRecords, OutliersRecords
+from app.services.db.schemas import RawRecords, OutliersRecords, MLPredictionsRecords
 from dateutil.parser import parse
 
 
@@ -213,18 +213,58 @@ async def get_data_with_outliers(
     "/predictions",
     response_model=List[Prediction],
     status_code=status.HTTP_200_OK,
+    summary="Получить ML-прогнозы последней итерации"
 )
 async def get_predictions(
-    data_type: DataType,
-    # token=Depends(security),
-    # user_data=Depends(get_current_user)
+    token=Depends(security),
+    user_data=Depends(get_current_user)
 ) -> List[Prediction]:
+    """
+    Возвращает список прогнозов из таблицы ml_predictions_records
+    для текущего пользователя, взятых из последней итерации:
+      - diagnosisName: название диагноза
+      - result: вероятность (строка)
+    """
+    email = user_data.email
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email не передан"
+        )
+
+    session: Session = await get_session().__anext__()
     try:
-        
-        return []
+        # 1) находим номер последней итерации для этого email
+        subq = (
+            select(func.max(MLPredictionsRecords.iteration_num))
+            .where(MLPredictionsRecords.email == email)
+            .scalar_subquery()
+        )
+
+        # 2) выбираем записи этой итерации
+        stmt = (
+            select(MLPredictionsRecords)
+            .where(
+                (MLPredictionsRecords.email == email) &
+                (MLPredictionsRecords.iteration_num == subq)
+            )
+            .order_by(MLPredictionsRecords.diagnosis_name)
+        )
+        recs = session.execute(stmt).scalars().all()
+
+        # 3) формируем ответ
+        predictions = [
+            Prediction(
+                diagnosisName=rec.diagnosis_name,
+                result=rec.result_value
+            )
+            for rec in recs
+        ]
+
+        return predictions
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching or processing data: {e}"
+            detail=f"Ошибка при выборке прогнозов: {e}"
         )
