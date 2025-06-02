@@ -7,11 +7,12 @@ class DataItem(BaseModel):
     dataType: str | None = ""
     value: str | None = ""
 
-
 class DataType(str, Enum):
+    # legacy
+    SLEEP_SESSION_DATA             = "SleepSessionData"
     # Исходные типы
-    SLEEP_SESSION_STAGES_DATA                    = "SleepSessionStagesData"
-    SLEEP_SESSION_TIME_DATA                    = "SleepSessionTimeData"
+    SLEEP_SESSION_STAGES_DATA             = "SleepSessionStagesData"
+    SLEEP_SESSION_TIME_DATA               = "SleepSessionTimeData"
     BLOOD_OXYGEN_DATA                     = "BloodOxygenData"
     HEART_RATE_RECORD                     = "HeartRateRecord"
     ACTIVE_CALORIES_BURNED_RECORD         = "ActiveCaloriesBurnedRecord"

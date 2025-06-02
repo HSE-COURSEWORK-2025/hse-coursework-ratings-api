@@ -21,3 +21,5 @@ aioredis
 websockets
 setuptools
 isodate
+fhir.resources
+asyncpg
