@@ -1,22 +1,30 @@
 import json
-import pandas as pd
+import io
+import qrcode
 import isodate
+
 from typing import List
 
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Depends
-from app.services.kafka import kafka_client
-from app.services.auth import get_current_user
-from app.services.redisClient import redis_client_async
-from app.models.models import DataItem, DataType, KafkaRawDataMsg, DataRecord, DataWithOutliers, Prediction
-from app.settings import settings, security
-from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from app.services.db.db_session import get_session
-from app.services.db.schemas import RawRecords, OutliersRecords, MLPredictionsRecords
+from fastapi.responses import StreamingResponse
+
 from dateutil.parser import parse
 
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
+
+from app.services.auth import get_current_user
+from app.services.db.db_session import get_session
+from app.services.db.engine import db_engine
+from app.services.db.schemas import RawRecords, OutliersRecords, MLPredictionsRecords
+from app.services.FHIR import FHIRTransformer
+from app.models.models import DataType, DataRecord, DataWithOutliers, Prediction
+from app.settings import settings, security
 
 api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
+
+BATCH_SIZE = 100
 
 
 @api_v2_get_data_router.get(
@@ -27,7 +35,8 @@ api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
 )
 async def get_raw_data_sleep_session_time_data(
     token=Depends(security),
-    user_data=Depends(get_current_user)
+    user_data=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> List[DataRecord]:
     """
     Возвращает список точек:
@@ -41,8 +50,6 @@ async def get_raw_data_sleep_session_time_data(
             detail="Email не передан"
         )
 
-    # Открываем сессию
-    session: Session = await get_session().__anext__()
     try:
         stmt = (
             select(RawRecords)
@@ -52,7 +59,7 @@ async def get_raw_data_sleep_session_time_data(
             )
             .order_by(RawRecords.time)
         )
-        result = session.execute(stmt)
+        result = await session.execute(stmt)
         records = result.scalars().all()
 
         output: List[DataRecord] = []
@@ -71,8 +78,6 @@ async def get_raw_data_sleep_session_time_data(
                 else:
                     total_seconds = (
                         (duration.days or 0) * 86400 +
-                        # (duration.hours or 0) * 3600 +
-                        # (duration.minutes or 0) * 60 +
                         (duration.seconds or 0)
                     )
             except Exception:
@@ -87,40 +92,48 @@ async def get_raw_data_sleep_session_time_data(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при выборке данных: {e}"
         )
-    finally:
-        session.close()
 
 
-# Ручка для отправки списка данных в Kafka с использованием BackgroundTasks
-@api_v2_get_data_router.get("/raw_data/{data_type}", status_code=status.HTTP_200_OK)
+@api_v2_get_data_router.get(
+    "/raw_data/{data_type}",
+    status_code=status.HTTP_200_OK,
+    response_model=List[DataRecord],
+)
 async def get_data_type(
     data_type: DataType,
     token=Depends(security),
-    user_data=Depends(get_current_user)
+    user_data=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> List[DataRecord]:
-    try:
-        current_user_email = user_data.email
-
-        if not current_user_email:
-            raise HTTPException(
+    """
+    Возвращает данные пользователя по типу: [(timestamp, value), ...]
+    """
+    current_user_email = user_data.email
+    if not current_user_email:
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Email not provided"
+            detail="Email not provided"
         )
 
-        session: Session = await get_session().__anext__()
+    try:
         stmt = (
             select(RawRecords)
             .where(
-                (RawRecords.data_type == data_type.value)
-                & (RawRecords.email == current_user_email)
+                (RawRecords.data_type == data_type.value) &
+                (RawRecords.email == current_user_email)
             )
             .order_by(RawRecords.time)
         )
-        result = session.execute(stmt)
+        result = await session.execute(stmt)
         records = result.scalars().all()
 
-        result = [DataRecord(X=parse(str(rec.time)).timestamp(), Y=float(str(rec.value))) for rec in records]
-        return result
+        return [
+            DataRecord(
+                X=parse(str(rec.time)).timestamp(),
+                Y=float(str(rec.value))
+            )
+            for rec in records
+        ]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -137,13 +150,14 @@ async def get_data_type(
 async def get_data_with_outliers(
     data_type: DataType,
     token=Depends(security),
-    user_data=Depends(get_current_user)
+    user_data=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> DataWithOutliers:
     """
     Возвращает:
       - data: все точки (X = UNIX-время, Y = значение)
-      - outliersX: список X (UNIX-времён) тех точек, которые считаются выбросами 
-        и уже сохранены в таблице OutliersRecords для самой последней итерации.
+      - outliersX: список X (UNIX-времён) точек, которые считаются выбросами
+        и уже сохранены в таблице OutliersRecords для последней итерации.
     """
     email = user_data.email
     if not email:
@@ -152,7 +166,6 @@ async def get_data_with_outliers(
             detail="Email не передан"
         )
 
-    session: Session = await get_session().__anext__()
     try:
         # 1) Все данные пользователя по типу
         stmt_all = (
@@ -163,14 +176,14 @@ async def get_data_with_outliers(
             )
             .order_by(RawRecords.time)
         )
-        all_records = session.execute(stmt_all).scalars().all()
+        all_result = await session.execute(stmt_all)
+        all_records = all_result.scalars().all()
         data = [
             DataRecord(X=rec.time.timestamp(), Y=float(rec.value))
             for rec in all_records
         ]
 
-        # 2) Находим максимальный номер итерации выбросов для этого пользователя и типа данных
-        #    делаем join RawRecords ↔ OutliersRecords, фильтруем по email+тип, берём max(iteration)
+        # 2) Подзапрос: максимальный номер итерации выбросов
         subq = (
             select(func.max(OutliersRecords.outliers_search_iteration_num))
             .join(RawRecords, OutliersRecords.raw_record_id == RawRecords.id)
@@ -181,7 +194,7 @@ async def get_data_with_outliers(
             .scalar_subquery()
         )
 
-        # 3) Получаем RawRecords, у которых есть OutliersRecords с этим max-значением
+        # 3) Записи, отмеченные как выбросы в этой итерации
         stmt_out = (
             select(RawRecords)
             .join(
@@ -195,7 +208,8 @@ async def get_data_with_outliers(
             )
             .order_by(RawRecords.time)
         )
-        outlier_recs = session.execute(stmt_out).scalars().all()
+        out_result = await session.execute(stmt_out)
+        outlier_recs = out_result.scalars().all()
         outliersX = [rec.time.timestamp() for rec in outlier_recs]
 
         return DataWithOutliers(data=data, outliersX=outliersX)
@@ -205,8 +219,6 @@ async def get_data_with_outliers(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при выборке данных: {e}"
         )
-    finally:
-        session.close()
 
 
 @api_v2_get_data_router.get(
@@ -217,7 +229,8 @@ async def get_data_with_outliers(
 )
 async def get_predictions(
     token=Depends(security),
-    user_data=Depends(get_current_user)
+    user_data=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> List[Prediction]:
     """
     Возвращает список прогнозов из таблицы ml_predictions_records
@@ -232,16 +245,15 @@ async def get_predictions(
             detail="Email не передан"
         )
 
-    session: Session = await get_session().__anext__()
     try:
-        # 1) находим номер последней итерации для этого email
+        # 1) Максимальный номер итерации для данного email
         subq = (
             select(func.max(MLPredictionsRecords.iteration_num))
             .where(MLPredictionsRecords.email == email)
             .scalar_subquery()
         )
 
-        # 2) выбираем записи этой итерации
+        # 2) Записи этой итерации
         stmt = (
             select(MLPredictionsRecords)
             .where(
@@ -250,21 +262,146 @@ async def get_predictions(
             )
             .order_by(MLPredictionsRecords.diagnosis_name)
         )
-        recs = session.execute(stmt).scalars().all()
+        recs_result = await session.execute(stmt)
+        recs = recs_result.scalars().all()
 
-        # 3) формируем ответ
-        predictions = [
-            Prediction(
-                diagnosisName=rec.diagnosis_name,
-                result=rec.result_value
-            )
+        return [
+            Prediction(diagnosisName=rec.diagnosis_name, result=rec.result_value)
             for rec in recs
         ]
-
-        return predictions
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при выборке прогнозов: {e}"
+        )
+
+
+@api_v2_get_data_router.get(
+    "/fhir/get_all_data",
+    status_code=status.HTTP_200_OK,
+    summary="Получить все данные в FHIR-формате (streaming через StreamingResponse)"
+)
+async def get_fhir_all_data_manual(
+    email: str,
+    background_tasks: BackgroundTasks
+) -> StreamingResponse:
+    """
+    Читает из БД пачками (BATCH_SIZE) с помощью AsyncSession и
+    отсылает клиенту JSON-Bundle по частям, не загружая все записи сразу.
+    """
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email не передан"
+        )
+
+    # 1) Создаём AsyncSession вручную
+    session: AsyncSession = db_engine.create_session()
+
+    async def bundle_generator():
+        # Отправляем начало JSON Bundle
+        yield '{"resourceType":"Bundle","type":"collection","entry":['
+
+        first = True
+        last_id = 0
+
+        while True:
+            # 2) Формируем запрос для следующей пачки по id
+            stmt = (
+                select(RawRecords)
+                .where(
+                    (RawRecords.email == email) &
+                    (RawRecords.id > last_id)
+                )
+                .order_by(RawRecords.id)
+                .limit(BATCH_SIZE)
+            )
+            result = await session.execute(stmt)
+            batch = result.scalars().all()
+
+            if not batch:
+                break
+
+            for rec in batch:
+                obs = FHIRTransformer.build_observation_dict(rec)
+                if not obs:
+                    continue
+
+                entry = {
+                    "fullUrl": f"urn:uuid:{rec.id}",
+                    "resource": obs
+                }
+
+                if not first:
+                    yield ","
+                else:
+                    first = False
+
+                yield json.dumps(entry, ensure_ascii=False)
+                last_id = rec.id
+
+            # Если размер batch меньше BATCH_SIZE — это была последняя пачка
+            if len(batch) < BATCH_SIZE:
+                break
+
+        # Закрываем JSON-массив и объект Bundle
+        yield "]}"
+
+    # 3) Откладываем закрытие сессии до конца стрима
+    background_tasks.add_task(session.close)
+
+    return StreamingResponse(
+        bundle_generator(),
+        media_type="application/fhir+json"
+    )
+
+
+@api_v2_get_data_router.get(
+    "/fhir/get_all_data_qr",
+    status_code=status.HTTP_200_OK,
+    summary="Получить QR-код со ссылкой на /fhir/get_all_data для текущего пользователя"
+)
+async def get_fhir_all_data_qr(
+    token=Depends(security),
+    user_data=Depends(get_current_user)
+):
+    """
+    Генерирует и возвращает PNG-изображение QR-кода,
+    внутри которого ссылка на /get_data/fhir/get_all_data?email=<текущий_email>.
+    """
+    user_email = user_data.email
+    if not user_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email не передан"
+        )
+
+    try:
+        target_url = f"{settings.DOMAIN_NAME}/get_data/fhir/get_all_data?email={user_email}"
+
+        # Генерация QR занимает время, обёрнём в поток, чтобы не блокировать loop
+        def sync_make_qr():
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(target_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+
+        img_bytes = await run_in_threadpool(sync_make_qr)
+
+        return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка генерации QR-кода для FHIR Bundle"
         )
