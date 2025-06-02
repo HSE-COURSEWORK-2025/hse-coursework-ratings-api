@@ -2,6 +2,7 @@ import json
 import io
 import qrcode
 import isodate
+import logging
 
 from typing import List
 
@@ -21,17 +22,16 @@ from app.services.db.schemas import RawRecords, OutliersRecords, MLPredictionsRe
 from app.services.FHIR import FHIRTransformer
 from app.models.models import DataType, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
+from app.services.redisClient import redis_client_async
 
 api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
-
-BATCH_SIZE = 100
 
 
 @api_v2_get_data_router.get(
     "/raw_data/SleepSessionTimeData",
     status_code=status.HTTP_200_OK,
     response_model=List[DataRecord],
-    summary="Получить данные с value из ISO-8601 в секундах"
+    summary="Получить данные с value из ISO-8601 в секундах",
 )
 async def get_raw_data_sleep_session_time_data(
     token=Depends(security),
@@ -46,16 +46,15 @@ async def get_raw_data_sleep_session_time_data(
     email = user_data.email
     if not email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email не передан"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
         )
 
     try:
         stmt = (
             select(RawRecords)
             .where(
-                (RawRecords.data_type == "SleepSessionTimeData") &
-                (RawRecords.email == email)
+                (RawRecords.data_type == "SleepSessionTimeData")
+                & (RawRecords.email == email)
             )
             .order_by(RawRecords.time)
         )
@@ -76,9 +75,8 @@ async def get_raw_data_sleep_session_time_data(
                 if hasattr(duration, "total_seconds"):
                     total_seconds = duration.total_seconds()
                 else:
-                    total_seconds = (
-                        (duration.days or 0) * 86400 +
-                        (duration.seconds or 0)
+                    total_seconds = (duration.days or 0) * 86400 + (
+                        duration.seconds or 0
                     )
             except Exception:
                 continue  # пропускаем, если формат невалиден
@@ -90,7 +88,7 @@ async def get_raw_data_sleep_session_time_data(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при выборке данных: {e}"
+            detail=f"Ошибка при выборке данных: {e}",
         )
 
 
@@ -111,16 +109,15 @@ async def get_data_type(
     current_user_email = user_data.email
     if not current_user_email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email not provided"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email not provided"
         )
 
     try:
         stmt = (
             select(RawRecords)
             .where(
-                (RawRecords.data_type == data_type.value) &
-                (RawRecords.email == current_user_email)
+                (RawRecords.data_type == data_type.value)
+                & (RawRecords.email == current_user_email)
             )
             .order_by(RawRecords.time)
         )
@@ -128,16 +125,12 @@ async def get_data_type(
         records = result.scalars().all()
 
         return [
-            DataRecord(
-                X=parse(str(rec.time)).timestamp(),
-                Y=float(str(rec.value))
-            )
+            DataRecord(X=parse(str(rec.time)).timestamp(), Y=float(str(rec.value)))
             for rec in records
         ]
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}"
         )
 
 
@@ -145,7 +138,7 @@ async def get_data_type(
     "/data_with_outliers/{data_type}",
     response_model=DataWithOutliers,
     status_code=status.HTTP_200_OK,
-    summary="Получить данные и заранее вычисленные выбросы (последней итерации)"
+    summary="Получить данные и заранее вычисленные выбросы (последней итерации)",
 )
 async def get_data_with_outliers(
     data_type: DataType,
@@ -162,8 +155,7 @@ async def get_data_with_outliers(
     email = user_data.email
     if not email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email не передан"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
         )
 
     try:
@@ -171,8 +163,7 @@ async def get_data_with_outliers(
         stmt_all = (
             select(RawRecords)
             .where(
-                (RawRecords.data_type == data_type.value) &
-                (RawRecords.email == email)
+                (RawRecords.data_type == data_type.value) & (RawRecords.email == email)
             )
             .order_by(RawRecords.time)
         )
@@ -183,28 +174,43 @@ async def get_data_with_outliers(
             for rec in all_records
         ]
 
-        # 2) Подзапрос: максимальный номер итерации выбросов
-        subq = (
+        iter_num_query = (
             select(func.max(OutliersRecords.outliers_search_iteration_num))
             .join(RawRecords, OutliersRecords.raw_record_id == RawRecords.id)
             .where(
                 (RawRecords.data_type == data_type.value) &
                 (RawRecords.email == email)
             )
-            .scalar_subquery()
         )
+
+        # 2) Читаем флаг из Redis  
+        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
+        flag = await redis_client_async.get(REDIS_KEY)  # вернет строку "true"/"false" или None
+
+        # 3) Достаем текущее значение max_iter из базы  
+        #    используем session.scalar, чтобы из scalar_subquery получить численное значение
+        max_iter = await session.scalar(iter_num_query)  # None или целое число
+
+        # 4) Если флаг == "true", уменьшаем его на 1
+        if flag == "true" and max_iter is not None:
+            max_iter = max_iter - 1
+
+        if max_iter is None:
+            max_iter = 0
+
+        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
+        await redis_client_async.get(REDIS_KEY)
 
         # 3) Записи, отмеченные как выбросы в этой итерации
         stmt_out = (
             select(RawRecords)
             .join(
                 OutliersRecords,
-                (OutliersRecords.raw_record_id == RawRecords.id) &
-                (OutliersRecords.outliers_search_iteration_num == subq)
+                (OutliersRecords.raw_record_id == RawRecords.id)
+                & (OutliersRecords.outliers_search_iteration_num == max_iter),
             )
             .where(
-                (RawRecords.data_type == data_type.value) &
-                (RawRecords.email == email)
+                (RawRecords.data_type == data_type.value) & (RawRecords.email == email)
             )
             .order_by(RawRecords.time)
         )
@@ -217,7 +223,7 @@ async def get_data_with_outliers(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при выборке данных: {e}"
+            detail=f"Ошибка при выборке данных: {e}",
         )
 
 
@@ -225,7 +231,7 @@ async def get_data_with_outliers(
     "/predictions",
     response_model=List[Prediction],
     status_code=status.HTTP_200_OK,
-    summary="Получить ML-прогнозы последней итерации"
+    summary="Получить ML-прогнозы последней итерации",
 )
 async def get_predictions(
     token=Depends(security),
@@ -241,8 +247,7 @@ async def get_predictions(
     email = user_data.email
     if not email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email не передан"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
         )
 
     try:
@@ -257,8 +262,8 @@ async def get_predictions(
         stmt = (
             select(MLPredictionsRecords)
             .where(
-                (MLPredictionsRecords.email == email) &
-                (MLPredictionsRecords.iteration_num == subq)
+                (MLPredictionsRecords.email == email)
+                & (MLPredictionsRecords.iteration_num == subq)
             )
             .order_by(MLPredictionsRecords.diagnosis_name)
         )
@@ -273,18 +278,17 @@ async def get_predictions(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при выборке прогнозов: {e}"
+            detail=f"Ошибка при выборке прогнозов: {e}",
         )
 
 
 @api_v2_get_data_router.get(
     "/fhir/get_all_data",
     status_code=status.HTTP_200_OK,
-    summary="Получить все данные в FHIR-формате (streaming через StreamingResponse)"
+    summary="Получить все данные в FHIR-формате (streaming через StreamingResponse)",
 )
 async def get_fhir_all_data_manual(
-    email: str,
-    background_tasks: BackgroundTasks
+    email: str, background_tasks: BackgroundTasks
 ) -> StreamingResponse:
     """
     Читает из БД пачками (BATCH_SIZE) с помощью AsyncSession и
@@ -292,8 +296,7 @@ async def get_fhir_all_data_manual(
     """
     if not email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email не передан"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
         )
 
     # 1) Создаём AsyncSession вручную
@@ -310,12 +313,9 @@ async def get_fhir_all_data_manual(
             # 2) Формируем запрос для следующей пачки по id
             stmt = (
                 select(RawRecords)
-                .where(
-                    (RawRecords.email == email) &
-                    (RawRecords.id > last_id)
-                )
+                .where((RawRecords.email == email) & (RawRecords.id > last_id))
                 .order_by(RawRecords.id)
-                .limit(BATCH_SIZE)
+                .limit(settings.BATCH_SIZE)
             )
             result = await session.execute(stmt)
             batch = result.scalars().all()
@@ -328,10 +328,7 @@ async def get_fhir_all_data_manual(
                 if not obs:
                     continue
 
-                entry = {
-                    "fullUrl": f"urn:uuid:{rec.id}",
-                    "resource": obs
-                }
+                entry = {"fullUrl": f"urn:uuid:{rec.id}", "resource": obs}
 
                 if not first:
                     yield ","
@@ -342,7 +339,7 @@ async def get_fhir_all_data_manual(
                 last_id = rec.id
 
             # Если размер batch меньше BATCH_SIZE — это была последняя пачка
-            if len(batch) < BATCH_SIZE:
+            if len(batch) < settings.BATCH_SIZE:
                 break
 
         # Закрываем JSON-массив и объект Bundle
@@ -351,20 +348,16 @@ async def get_fhir_all_data_manual(
     # 3) Откладываем закрытие сессии до конца стрима
     background_tasks.add_task(session.close)
 
-    return StreamingResponse(
-        bundle_generator(),
-        media_type="application/fhir+json"
-    )
+    return StreamingResponse(bundle_generator(), media_type="application/fhir+json")
 
 
 @api_v2_get_data_router.get(
     "/fhir/get_all_data_qr",
     status_code=status.HTTP_200_OK,
-    summary="Получить QR-код со ссылкой на /fhir/get_all_data для текущего пользователя"
+    summary="Получить QR-код со ссылкой на /fhir/get_all_data для текущего пользователя",
 )
 async def get_fhir_all_data_qr(
-    token=Depends(security),
-    user_data=Depends(get_current_user)
+    token=Depends(security), user_data=Depends(get_current_user)
 ):
     """
     Генерирует и возвращает PNG-изображение QR-кода,
@@ -373,12 +366,13 @@ async def get_fhir_all_data_qr(
     user_email = user_data.email
     if not user_email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email не передан"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
         )
 
     try:
-        target_url = f"{settings.DOMAIN_NAME}/get_data/fhir/get_all_data?email={user_email}"
+        target_url = (
+            f"{settings.DOMAIN_NAME}/get_data/fhir/get_all_data?email={user_email}"
+        )
 
         # Генерация QR занимает время, обёрнём в поток, чтобы не блокировать loop
         def sync_make_qr():
@@ -403,5 +397,5 @@ async def get_fhir_all_data_qr(
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Ошибка генерации QR-кода для FHIR Bundle"
+            detail="Ошибка генерации QR-кода для FHIR Bundle",
         )
