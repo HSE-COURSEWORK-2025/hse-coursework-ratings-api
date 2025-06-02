@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE-"
     REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE-"
 
+    REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE: str | None = "REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE-"
+
+    BATCH_SIZE: int | None = 100
+
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> str | list[str]:
         if isinstance(v, str) and not v.startswith("["):
