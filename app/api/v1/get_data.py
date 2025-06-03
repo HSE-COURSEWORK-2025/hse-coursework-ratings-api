@@ -189,9 +189,9 @@ async def get_data_with_outliers(
         )
 
         # 2) Читаем флаг из Redis  
-        # REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
-        # flag = await redis_client_async.get(REDIS_KEY)  # вернет строку "true"/"false" или None
-        flag = False
+        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
+        flag = await redis_client_async.get(REDIS_KEY)  # вернет строку "true"/"false" или None
+
         # 3) Достаем текущее значение max_iter из базы  
         #    используем session.scalar, чтобы из scalar_subquery получить численное значение
         max_iter = await session.scalar(iter_num_query)  # None или целое число
