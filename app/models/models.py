@@ -63,12 +63,12 @@ class KafkaRawDataMsg(BaseModel):
 
 
 class DataRecord(BaseModel):
-    X: float
+    X: str
     Y: float
 
 class DataWithOutliers(BaseModel):
     data: List[DataRecord]
-    outliersX: List[float]
+    outliersX: List[str]
 
 
 class Prediction(BaseModel):

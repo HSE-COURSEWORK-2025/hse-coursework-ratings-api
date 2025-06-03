@@ -23,6 +23,8 @@ from app.services.FHIR import FHIRTransformer
 from app.models.models import DataType, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
 from app.services.redisClient import redis_client_async
+from datetime import timezone
+
 
 api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
 
@@ -65,7 +67,7 @@ async def get_raw_data_sleep_session_time_data(
         for rec in records:
             # X: timestamp из datetime с tzinfo
             try:
-                x = rec.time.timestamp()
+                x = rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
                 continue  # пропускаем некорректные записи
 
@@ -125,7 +127,10 @@ async def get_data_type(
         records = result.scalars().all()
 
         return [
-            DataRecord(X=parse(str(rec.time)).timestamp(), Y=float(str(rec.value)))
+            DataRecord(
+                X=rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                Y=float(str(rec.value))
+            )
             for rec in records
         ]
     except Exception as e:
@@ -170,7 +175,7 @@ async def get_data_with_outliers(
         all_result = await session.execute(stmt_all)
         all_records = all_result.scalars().all()
         data = [
-            DataRecord(X=rec.time.timestamp(), Y=float(rec.value))
+            DataRecord(X=rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), Y=float(rec.value))
             for rec in all_records
         ]
 
@@ -184,9 +189,9 @@ async def get_data_with_outliers(
         )
 
         # 2) Читаем флаг из Redis  
-        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
-        flag = await redis_client_async.get(REDIS_KEY)  # вернет строку "true"/"false" или None
-
+        # REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
+        # flag = await redis_client_async.get(REDIS_KEY)  # вернет строку "true"/"false" или None
+        flag = False
         # 3) Достаем текущее значение max_iter из базы  
         #    используем session.scalar, чтобы из scalar_subquery получить численное значение
         max_iter = await session.scalar(iter_num_query)  # None или целое число
@@ -198,8 +203,6 @@ async def get_data_with_outliers(
         if max_iter is None:
             max_iter = 0
 
-        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
-        await redis_client_async.get(REDIS_KEY)
 
         # 3) Записи, отмеченные как выбросы в этой итерации
         stmt_out = (
@@ -216,7 +219,7 @@ async def get_data_with_outliers(
         )
         out_result = await session.execute(stmt_out)
         outlier_recs = out_result.scalars().all()
-        outliersX = [rec.time.timestamp() for rec in outlier_recs]
+        outliersX = [rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") for rec in outlier_recs]
 
         return DataWithOutliers(data=data, outliersX=outliersX)
 
