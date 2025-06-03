@@ -23,6 +23,8 @@ from app.services.FHIR import FHIRTransformer
 from app.models.models import DataType, DataRecord, DataWithOutliers, Prediction
 from app.settings import settings, security
 from app.services.redisClient import redis_client_async
+from datetime import timezone
+
 
 api_v2_get_data_router = APIRouter(prefix="/get_data", tags=["get_data"])
 
@@ -65,7 +67,7 @@ async def get_raw_data_sleep_session_time_data(
         for rec in records:
             # X: timestamp из datetime с tzinfo
             try:
-                x = rec.time.timestamp()
+                x = rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
                 continue  # пропускаем некорректные записи
 
@@ -125,12 +127,88 @@ async def get_data_type(
         records = result.scalars().all()
 
         return [
-            DataRecord(X=parse(str(rec.time)).timestamp(), Y=float(str(rec.value)))
+            DataRecord(
+                X=rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                Y=float(str(rec.value))
+            )
             for rec in records
         ]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}"
+        )
+
+
+@api_v2_get_data_router.get(
+    "/data_with_outliers/SleepSessionTimeData",
+    response_model=DataWithOutliers,
+    status_code=status.HTTP_200_OK,
+    summary="Получить данные и заранее вычисленные выбросы (последней итерации)",
+)
+async def get_data_with_outliers_sleep_session_time_data(
+    token=Depends(security),
+    user_data=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DataWithOutliers:
+    """
+    Возвращает:
+      - data: все точки (X = UNIX-время, Y = значение)
+      - outliersX: список X (UNIX-времён) точек, которые считаются выбросами
+        и уже сохранены в таблице OutliersRecords для последней итерации.
+    """
+
+    email = user_data.email
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email не передан"
+        )
+
+    try:
+        # 1) Все данные пользователя по типу
+        stmt_all = (
+            select(RawRecords)
+            .where(
+                (RawRecords.data_type == "SleepSessionTimeData") & (RawRecords.email == email)
+            )
+            .order_by(RawRecords.time)
+        )
+
+
+
+
+        all_result = await session.execute(stmt_all)
+        all_records = all_result.scalars().all()
+
+        data: List[DataRecord] = []
+        for rec in all_records:
+            # X: timestamp из datetime с tzinfo
+            try:
+                x = rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                continue  # пропускаем некорректные записи
+
+            # Y: парсим ISO-8601 строку в секунды
+            try:
+                duration = isodate.parse_duration(rec.value)
+                if hasattr(duration, "total_seconds"):
+                    total_seconds = duration.total_seconds()
+                else:
+                    total_seconds = (duration.days or 0) * 86400 + (
+                        duration.seconds or 0
+                    )
+            except Exception:
+                continue  # пропускаем, если формат невалиден
+
+            data.append(DataRecord(X=x, Y=float(total_seconds)))
+
+        outliersX = []
+        
+        return DataWithOutliers(data=data, outliersX=outliersX)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при выборке данных: {e}",
         )
 
 
@@ -170,7 +248,7 @@ async def get_data_with_outliers(
         all_result = await session.execute(stmt_all)
         all_records = all_result.scalars().all()
         data = [
-            DataRecord(X=rec.time.timestamp(), Y=float(rec.value))
+            DataRecord(X=rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), Y=float(rec.value))
             for rec in all_records
         ]
 
@@ -198,8 +276,6 @@ async def get_data_with_outliers(
         if max_iter is None:
             max_iter = 0
 
-        REDIS_KEY = f"{settings.REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE}{email}"
-        await redis_client_async.get(REDIS_KEY)
 
         # 3) Записи, отмеченные как выбросы в этой итерации
         stmt_out = (
@@ -216,7 +292,7 @@ async def get_data_with_outliers(
         )
         out_result = await session.execute(stmt_out)
         outlier_recs = out_result.scalars().all()
-        outliersX = [rec.time.timestamp() for rec in outlier_recs]
+        outliersX = [rec.time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") for rec in outlier_recs]
 
         return DataWithOutliers(data=data, outliersX=outliersX)
 
@@ -251,6 +327,7 @@ async def get_predictions(
         )
 
     try:
+        # todo fix
         # 1) Максимальный номер итерации для данного email
         subq = (
             select(func.max(MLPredictionsRecords.iteration_num))
