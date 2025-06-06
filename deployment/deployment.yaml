@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: data-collection-api
+  name: ratings-api
   labels:
-    app: data-collection-api
+    app: ratings-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: data-collection-api
+      app: ratings-api
   template:
     metadata:
       labels:
-        app: data-collection-api
+        app: ratings-api
     spec:
       containers:
-      - name: data-collection-api-container
-        image: awesomecosmonaut/data-collection-api-app:latest
+      - name: ratings-api-container
+        image: awesomecosmonaut/ratings-api-app:latest
         ports:
         - containerPort: 8080
         resources:
