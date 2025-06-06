@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     APP_VERSION: str = "dev"
-    APP_TITLE: str = "HSE-COURSEWORK Data Collection API"
+    APP_TITLE: str = "HSE-COURSEWORK Rating API"
     APP_CONTACT_NAME: str = "MALYSH_II"
     APP_CONTACT_EMAIL: EmailStr = "iimalysh@edu.hse.ru"
     APP_OPENAPI_URL: str = "/openapi.json"
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     APP_REDOC_URL: str | None = None
     PRODUCTION: bool = False
 
-    ROOT_PATH: str | None = "/data-collection-api"
+    ROOT_PATH: str | None = "/ratings-api"
     PORT: int | None = 8080
 
     SECRET_KEY: str = secrets.token_urlsafe(32)
