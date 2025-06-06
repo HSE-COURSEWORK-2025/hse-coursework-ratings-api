@@ -16,7 +16,6 @@ from app.api.root import root_router
 from app.api.v1.router import api_v1_router
 from app.services.db.schemas import Base
 from app.services.db.engine import db_engine
-from app.services.kafka import kafka_client
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -88,7 +87,6 @@ async def startup_event():
     # except Exception:
     #     pass
 
-    await kafka_client.connect()
     await redis_client_async.connect()
 
 
@@ -98,7 +96,6 @@ async def shutdown_event():
     # await FastAPILimiter.close()
     ...
 
-    await kafka_client.disconnect()
     await redis_client_async.disconnect()
 
 

@@ -19,14 +19,14 @@ def get_root():
         """
     if settings.APP_DOCS_URL:
         content += f"""
-        <p><a href='/data-collection-api{settings.APP_DOCS_URL}'>Swagger UI</a></p>
+        <p><a href='/rating-api{settings.APP_DOCS_URL}'>Swagger UI</a></p>
         """
     if settings.APP_REDOC_URL:
         content += f"""
         <p><a href='/v{settings.APP_REDOC_URL}'>ReDoc</a></p>
         """
     content += """
-        <p><a href='/data-collection-api/metrics'>Metrics</a></p>
+        <p><a href='/rating-api/metrics'>Metrics</a></p>
         </body>
         </html>
         """
