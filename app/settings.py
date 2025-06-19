@@ -3,7 +3,6 @@ import logging
 import secrets
 from pydantic import AnyHttpUrl, validator, EmailStr
 from pydantic_settings import BaseSettings
-from fastapi.security import OAuth2PasswordBearer
 from fastapi.security import HTTPBearer
 from fastapi import WebSocket
 from typing import Set
@@ -53,13 +52,18 @@ class Settings(BaseSettings):
     AUTH_API_URL: str | None = f"{DOMAIN_NAME}:8081"
     AUTH_API_USER_INFO_PATH: str | None = "/auth-api/api/v1/auth/users/me"
 
-
     REDIS_HOST: str | None = "localhost"
     REDIS_PORT: str | None = "6379"
-    REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE-"
-    REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE: str | None = "REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE-"
+    REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE: str | None = (
+        "REDIS_DATA_COLLECTION_GOOGLE_FITNESS_API_PROGRESS_BAR_NAMESPACE-"
+    )
+    REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE: str | None = (
+        "REDIS_DATA_COLLECTION_GOOGLE_HEALTH_API_PROGRESS_BAR_NAMESPACE-"
+    )
 
-    REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE: str | None = "REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE-"
+    REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE: str | None = (
+        "REDIS_FIND_OUTLIERS_JOB_IS_ACTIVE_NAMESPACE-"
+    )
 
     BATCH_SIZE: int | None = 100
 
@@ -91,11 +95,9 @@ def setup_logging():
         level=settings.LOG_LEVEL.upper(),
         format=settings.LOG_DEFAULT_FORMAT,
     )
-    # uvicorn
     handler_default = logging.StreamHandler()
     handler_default.setFormatter(logging.Formatter(settings.LOG_UVICORN_FORMAT))
     logging.getLogger("uvicorn").handlers = [handler_default]
-    # uvicorn access
     handler_access = logging.StreamHandler()
     handler_access.setFormatter(logging.Formatter(settings.LOG_ACCESS_FORMAT))
     logging.getLogger("uvicorn.access").handlers = [handler_access]

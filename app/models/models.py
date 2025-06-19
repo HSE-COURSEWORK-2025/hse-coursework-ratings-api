@@ -7,46 +7,44 @@ class DataItem(BaseModel):
     dataType: str | None = ""
     value: str | None = ""
 
-class DataType(str, Enum):
-    # legacy
-    SLEEP_SESSION_DATA             = "SleepSessionData"
-    # Исходные типы
-    SLEEP_SESSION_STAGES_DATA             = "SleepSessionStagesData"
-    SLEEP_SESSION_TIME_DATA               = "SleepSessionTimeData"
-    BLOOD_OXYGEN_DATA                     = "BloodOxygenData"
-    HEART_RATE_RECORD                     = "HeartRateRecord"
-    ACTIVE_CALORIES_BURNED_RECORD         = "ActiveCaloriesBurnedRecord"
-    BASAL_METABOLIC_RATE_RECORD           = "BasalMetabolicRateRecord"
-    BLOOD_PRESSURE_RECORD                 = "BloodPressureRecord"
-    BODY_FAT_RECORD                       = "BodyFatRecord"
-    BODY_TEMPERATURE_RECORD               = "BodyTemperatureRecord"
-    BONE_MASS_RECORD                      = "BoneMassRecord"
-    DISTANCE_RECORD                       = "DistanceRecord"
-    EXERCISE_SESSION_RECORD               = "ExerciseSessionRecord"
-    HYDRATION_RECORD                      = "HydrationRecord"
-    SPEED_RECORD                          = "SpeedRecord"
-    STEPS_RECORD                          = "StepsRecord"
-    TOTAL_CALORIES_BURNED_RECORD          = "TotalCaloriesBurnedRecord"
-    WEIGHT_RECORD                         = "WeightRecord"
-    BASAL_BODY_TEMPERATURE_RECORD         = "BasalBodyTemperatureRecord"
-    FLOORS_CLIMBED_RECORD                 = "FloorsClimbedRecord"
-    INTERMENSTRUAL_BLEEDING_RECORD        = "IntermenstrualBleedingRecord"
-    LEAN_BODY_MASS_RECORD                 = "LeanBodyMassRecord"
-    MENSTRUATION_FLOW_RECORD              = "MenstruationFlowRecord"
-    NUTRITION_RECORD                      = "NutritionRecord"
-    POWER_RECORD                          = "PowerRecord"
-    RESPIRATORY_RATE_RECORD               = "RespiratoryRateRecord"
-    RESTING_HEART_RATE_RECORD             = "RestingHeartRateRecord"
-    SKIN_TEMPERATURE_RECORD               = "SkinTemperatureRecord"
 
-    # Дополнительно добавленные типы
-    HEIGHT_RECORD                         = "HeightRecord"
-    ACTIVITY_SEGMENT_RECORD               = "ActivitySegmentRecord"
-    CYCLING_PEDALING_CADENCE_RECORD       = "CyclingPedalingCadenceRecord"
-    CYCLING_PEDALING_CUMULATIVE_RECORD    = "CyclingPedalingCumulativeRecord"
-    HEART_MINUTES_RECORD                  = "HeartMinutesRecord"
-    ACTIVE_MINUTES_RECORD                 = "ActiveMinutesRecord"
-    STEP_CADENCE_RECORD                   = "StepCadenceRecord"
+class DataType(str, Enum):
+    SLEEP_SESSION_DATA = "SleepSessionData"
+    SLEEP_SESSION_STAGES_DATA = "SleepSessionStagesData"
+    SLEEP_SESSION_TIME_DATA = "SleepSessionTimeData"
+    BLOOD_OXYGEN_DATA = "BloodOxygenData"
+    HEART_RATE_RECORD = "HeartRateRecord"
+    ACTIVE_CALORIES_BURNED_RECORD = "ActiveCaloriesBurnedRecord"
+    BASAL_METABOLIC_RATE_RECORD = "BasalMetabolicRateRecord"
+    BLOOD_PRESSURE_RECORD = "BloodPressureRecord"
+    BODY_FAT_RECORD = "BodyFatRecord"
+    BODY_TEMPERATURE_RECORD = "BodyTemperatureRecord"
+    BONE_MASS_RECORD = "BoneMassRecord"
+    DISTANCE_RECORD = "DistanceRecord"
+    EXERCISE_SESSION_RECORD = "ExerciseSessionRecord"
+    HYDRATION_RECORD = "HydrationRecord"
+    SPEED_RECORD = "SpeedRecord"
+    STEPS_RECORD = "StepsRecord"
+    TOTAL_CALORIES_BURNED_RECORD = "TotalCaloriesBurnedRecord"
+    WEIGHT_RECORD = "WeightRecord"
+    BASAL_BODY_TEMPERATURE_RECORD = "BasalBodyTemperatureRecord"
+    FLOORS_CLIMBED_RECORD = "FloorsClimbedRecord"
+    INTERMENSTRUAL_BLEEDING_RECORD = "IntermenstrualBleedingRecord"
+    LEAN_BODY_MASS_RECORD = "LeanBodyMassRecord"
+    MENSTRUATION_FLOW_RECORD = "MenstruationFlowRecord"
+    NUTRITION_RECORD = "NutritionRecord"
+    POWER_RECORD = "PowerRecord"
+    RESPIRATORY_RATE_RECORD = "RespiratoryRateRecord"
+    RESTING_HEART_RATE_RECORD = "RestingHeartRateRecord"
+    SKIN_TEMPERATURE_RECORD = "SkinTemperatureRecord"
+
+    HEIGHT_RECORD = "HeightRecord"
+    ACTIVITY_SEGMENT_RECORD = "ActivitySegmentRecord"
+    CYCLING_PEDALING_CADENCE_RECORD = "CyclingPedalingCadenceRecord"
+    CYCLING_PEDALING_CUMULATIVE_RECORD = "CyclingPedalingCumulativeRecord"
+    HEART_MINUTES_RECORD = "HeartMinutesRecord"
+    ACTIVE_MINUTES_RECORD = "ActiveMinutesRecord"
+    STEP_CADENCE_RECORD = "StepCadenceRecord"
 
 
 class TokenData(BaseModel):
@@ -65,6 +63,7 @@ class KafkaRawDataMsg(BaseModel):
 class DataRecord(BaseModel):
     X: str
     Y: float
+
 
 class DataWithOutliers(BaseModel):
     data: List[DataRecord]

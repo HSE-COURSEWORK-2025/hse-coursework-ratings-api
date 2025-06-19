@@ -1,7 +1,6 @@
 import aioredis
 import logging
-from redis import Redis
-from app.settings import settings  # Путь до ваших настроек, если необходимо
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,8 @@ class RedisClientAsync:
         if self._redis is None:
             try:
                 self._redis = await aioredis.from_url(
-                    f"redis://{settings.REDIS_HOST}", decode_responses=True,
+                    f"redis://{settings.REDIS_HOST}",
+                    decode_responses=True,
                 )
                 logger.info(f"Подключение к Redis: redis://{settings.REDIS_HOST}")
             except Exception as e:

@@ -1,24 +1,21 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, conint
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.auth import get_current_user
 from app.services.db.db_session import get_session
-from app.services.db.schemas import RatingRecords  # Ваша схема
-from app.models.models import TokenData  # Предполагаем, что get_current_user возвращает модель User
-from app.settings import settings, security
+from app.services.db.schemas import RatingRecords
+from app.settings import security
 
 api_v2_ratings_router = APIRouter(prefix="/ratings", tags=["ratings"])
 
 
-# Pydantic-модель для входящих данных (звёзды от 1 до 5)
 class RatingIn(BaseModel):
     rating: Annotated[float, Field(ge=1, le=5)]
 
 
-# Pydantic-модель для ответа с текущей оценкой
 class RatingOut(BaseModel):
     rating: float
 
@@ -87,13 +84,13 @@ async def submit_rating(
         )
 
     try:
-        # Проверяем, есть ли уже запись для этого пользователя
-        stmt_select = select(RatingRecords).where(RatingRecords.email == user_data.email)
+        stmt_select = select(RatingRecords).where(
+            RatingRecords.email == user_data.email
+        )
         result = await session.execute(stmt_select)
         existing = result.scalar_one_or_none()
 
         if existing:
-            # Обновляем существующую запись
             stmt_update = (
                 update(RatingRecords)
                 .where(RatingRecords.email == user_data.email)
@@ -102,7 +99,6 @@ async def submit_rating(
             await session.execute(stmt_update)
             message = "Оценка обновлена"
         else:
-            # Вставляем новую запись
             stmt_insert = insert(RatingRecords).values(
                 email=user_data.email,
                 value=float(payload.rating),
