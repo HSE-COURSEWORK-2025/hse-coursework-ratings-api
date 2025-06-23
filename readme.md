@@ -4,7 +4,7 @@
 
 Этот репозиторий содержит сервис для сбора и хранения пользовательских оценок. Сервис позволяет пользователям выставлять и обновлять свою оценку, а также получать свою текущую оценку. 
 
-[](https://github.com/HSE-COURSEWORK-2025/hse-coursework-ratings-api/blob/master/swagger_demo.png)
+![](https://github.com/HSE-COURSEWORK-2025/hse-coursework-ratings-api/blob/master/swagger_demo.png)
 
 ## Основные возможности
 - Получение текущей оценки пользователя
